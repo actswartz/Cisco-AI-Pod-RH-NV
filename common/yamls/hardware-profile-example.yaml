@@ -1,0 +1,28 @@
+# Example HardwareProfile (OpenShift AI 2.10+ / 3.x)
+# Create via the dashboard (Settings → Hardware profiles) or apply this CR.
+# The UI selection is translated into the pod spec that KServe uses for the inference Deployment.
+
+apiVersion: dashboard.opendatahub.io/v1
+kind: HardwareProfile
+metadata:
+  name: nvidia-a100-40g
+  namespace: redhat-ods-applications   # or your project if namespaced
+spec:
+  displayName: "NVIDIA A100 40GB"
+  description: "Single A100 40GB for LLM inference (Triton / NIM)"
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule
+  nodeSelector:
+    nvidia.com/gpu.product: "NVIDIA-A100-40GB"   # match your actual node label
+  resources:
+    requests:
+      nvidia.com/gpu: "1"
+      cpu: "4"
+      memory: 16Gi
+    limits:
+      nvidia.com/gpu: "1"
+      cpu: "8"
+      memory: 32Gi
+  # You can also define MIG profiles, multi-GPU, etc. for more advanced classes

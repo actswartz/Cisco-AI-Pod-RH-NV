@@ -1,0 +1,127 @@
+schemaVersion: 2.2.0
+metadata:
+  name: rhoai-llm-inference-demos
+  displayName: RHOAI LLM Inference Demos
+  description: Student workspace for Red Hat OpenShift AI scalable LLM inference instructor-led demos. Includes oc, Python clients, hey/k6/locust load tools.
+  tags: ["openshift", "openshift-ai", "rhoai", "triton", "nim", "llm", "inference", "devspaces"]
+  projectType: python
+  language: python
+
+components:
+  - name: tools
+    container:
+      image: quay.io/devfile/universal-developer-image:ubi9-latest
+      # Red Hat official alternative (requires pull secret in cluster):
+      # image: registry.redhat.io/devspaces/udi-rhel9:latest
+      memoryLimit: 4Gi
+      memoryRequest: 1Gi
+      cpuLimit: 2000m
+      cpuRequest: 500m
+      mountSources: true
+      env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: PIP_NO_CACHE_DIR
+          value: "1"
+        - name: WORKSHOP_HOME
+          value: /projects/rhoai-llm-inference-demos
+      endpoints:
+        - name: locust-ui
+          targetPort: 8089
+          exposure: public
+          secure: false
+          protocol: http
+
+  # Persistent volume for Python packages and any model caches
+  - name: python-venv
+    volume:
+      size: 2Gi
+
+commands:
+  - id: setup-workshop-env
+    exec:
+      component: tools
+      commandLine: |
+        set -euo pipefail
+        echo "=== RHOAI LLM Inference Demos — Workspace Setup ==="
+        echo "Project source: ${PROJECT_SOURCE}"
+
+        # Python virtual environment (persistent)
+        if [ ! -d /home/user/.venv ]; then
+          python -m venv /home/user/.venv
+        fi
+        source /home/user/.venv/bin/activate
+        pip install --upgrade pip wheel setuptools
+
+        echo "Installing Python inference & load libraries..."
+        pip install --no-cache-dir \
+          requests \
+          openai \
+          locust \
+          numpy \
+          python-dotenv \
+          rich
+
+        # Install hey (excellent simple Go load tester)
+        echo "Installing hey load tester..."
+        ARCH=$(uname -m)
+        case "$ARCH" in
+          x86_64)  HEY_ARCH="amd64" ;;
+          aarch64|arm64) HEY_ARCH="arm64" ;;
+          *)       HEY_ARCH="amd64" ;;
+        esac
+        curl -fsSL -o /tmp/hey "https://github.com/rakyll/hey/releases/latest/download/hey_linux_${HEY_ARCH}"
+        chmod +x /tmp/hey
+        sudo mv /tmp/hey /usr/local/bin/hey || mv /tmp/hey /usr/local/bin/hey
+
+        # k6 (already popular, fast JS-based)
+        if ! command -v k6 &> /dev/null; then
+          echo "Installing k6..."
+          curl -fsSL -o /tmp/k6.tar.gz "https://github.com/grafana/k6/releases/download/v0.54.0/k6-v0.54.0-linux-${HEY_ARCH}.tar.gz"
+          tar -xzf /tmp/k6.tar.gz -C /usr/local/bin --strip-components=1
+          rm /tmp/k6.tar.gz
+        fi
+
+        # Apache Bench (ab) for quick tests
+        if ! command -v ab &> /dev/null; then
+          sudo dnf install -y --quiet httpd-tools || true
+        fi
+
+        # Make venv the default for the terminal
+        echo 'source /home/user/.venv/bin/activate' >> ~/.bashrc
+        echo 'export PATH="/home/user/.venv/bin:$PATH"' >> ~/.bashrc
+
+        echo ""
+        echo "=== Environment ready ==="
+        echo "Python: $(python --version)"
+        echo "oc: $(oc version --client 2>/dev/null | head -1 || echo 'oc not found — you may need to login via OpenShift console first')"
+        echo "hey: $(hey -version 2>/dev/null || echo 'hey installed')"
+        echo "k6: $(k6 version 2>/dev/null || echo 'k6 installed')"
+        echo ""
+        echo "Next steps:"
+        echo "  1. (If needed) oc login or use the embedded OpenShift authentication"
+        echo "  2. cd module-02 && python client/infer.py --help"
+        echo "  3. Follow your instructor for the first module"
+      workingDir: ${PROJECT_SOURCE}
+      timeout: 300s
+      label: "Setup workshop environment (Python + load tools)"
+
+  - id: show-status
+    exec:
+      component: tools
+      commandLine: |
+        echo "=== Workspace Status ==="
+        echo "Working dir: $(pwd)"
+        echo "Python venv: $(source /home/user/.venv/bin/activate && python --version)"
+        echo "oc whoami: $(oc whoami 2>/dev/null || echo 'not logged in')"
+        echo "Available modules: $(ls -d module-* 2>/dev/null || echo 'none')"
+      workingDir: ${PROJECT_SOURCE}
+      label: "Show workshop status"
+
+events:
+  postStart:
+    - setup-workshop-env
+
+attributes:
+  controller.devfile.io/storage-type: ephemeral
+  # Use 'ephemeral' for quick classroom spin-up; switch to 'persistent' if students need to keep notebooks/models across days

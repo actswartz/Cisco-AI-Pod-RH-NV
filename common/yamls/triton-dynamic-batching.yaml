@@ -1,0 +1,46 @@
+# Example model configuration (config.pbtxt) that enables dynamic batching + response caching.
+# Place this file inside your model repository at:
+#   <model-repo-root>/<model-name>/config.pbtxt
+#
+# Then point the ServingRuntime / InferenceService at that repository (via S3 data connection or PVC).
+#
+# This is the file you edit live during Module 3 to demonstrate the effect of
+# max_batch_size, preferred_batch_size, and response cache.
+
+name: "tiny-llama"
+backend: "python"          # or "onnx", "tensorrt", "pytorch", etc.
+max_batch_size: 1          # <--- START HERE (value shown in Module 3 "before" demo)
+input [
+  {
+    name: "text_input"
+    data_type: TYPE_STRING
+    dims: [ 1 ]
+  }
+]
+output [
+  {
+    name: "text_output"
+    data_type: TYPE_STRING
+    dims: [ 1 ]
+  }
+]
+instance_group [
+  {
+    count: 1
+    kind: KIND_GPU     # or KIND_CPU for lightweight demos
+  }
+]
+
+# === DYNAMIC BATCHING (enable for the "after" part of the demo) ===
+# dynamic_batching {
+#   preferred_batch_size: [ 4, 8 ]
+#   max_queue_delay_microseconds: 10000
+# }
+
+# === RESPONSE CACHE (enable to show the dramatic second-request latency drop) ===
+# response_cache {
+#   enable: true
+# }
+
+# For production models you will also define sequence_batching, ensemble scheduling,
+# or the Python backend with actual tokenization + generation code.

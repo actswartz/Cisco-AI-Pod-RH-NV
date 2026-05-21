@@ -1,0 +1,66 @@
+# Custom NVIDIA Triton ServingRuntime for Red Hat OpenShift AI (KServe / single-model)
+# Use this when you want explicit control over batching, caching, and model repository layout.
+#
+# Apply with:
+#   oc apply -f common/yamls/triton-kserve-servingruntime.yaml -n <your-data-science-project>
+#
+# Then in the OpenShift AI dashboard, when deploying a model, select this runtime.
+
+apiVersion: serving.kserve.io/v1alpha1
+kind: ServingRuntime
+metadata:
+  name: triton-kserve-custom
+  annotations:
+    openshift.io/display-name: "Custom Triton (KServe) — tunable batching & cache"
+    opendatahub.io/dashboard: "true"
+spec:
+  annotations:
+    prometheus.kserve.io/path: /metrics
+    prometheus.kserve.io/port: "8002"
+  containers:
+    - name: kserve-container
+      image: nvcr.io/nvidia/tritonserver:24.03-py3   # Pin a version that matches your CUDA drivers / GPU Operator
+      args:
+        - tritonserver
+        - --model-store=/mnt/models
+        - --grpc-port=9000
+        - --http-port=8080
+        - --allow-grpc=true
+        - --allow-http=true
+        - --log-verbose=1
+      resources:
+        requests:
+          cpu: "1"
+          memory: 4Gi
+        limits:
+          cpu: "4"
+          memory: 8Gi
+          # nvidia.com/gpu: "1"   # Uncomment when using a Hardware Profile with GPU
+      ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        - containerPort: 8001      # Triton gRPC (optional)
+          name: grpc
+          protocol: TCP
+        - containerPort: 8002      # Metrics
+          name: metrics
+          protocol: TCP
+  protocolVersions:
+    - v2
+    - grpc-v2
+  supportedModelFormats:
+    - name: onnx
+      version: "1"
+      autoSelect: true
+    - name: pytorch
+      version: "1"
+      autoSelect: true
+    - name: tensorflow
+      version: "2"
+      autoSelect: true
+    - name: tensorrt
+      version: "8"
+      autoSelect: true
+    # Add "python" if you use Triton's Python backend for custom tokenization / RAG logic
+  # For multi-model (ModelMesh) you would set multiModel: true and use a different adapter stanza.

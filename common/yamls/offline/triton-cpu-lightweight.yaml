@@ -1,0 +1,47 @@
+# Lightweight CPU-only Triton runtime for demos without GPUs or NGC access.
+# Works great with very small ONNX models or Triton's "python" backend + a tiny model.
+#
+# Good for:
+# - Classroom laptops / small clusters
+# - Air-gapped or partner enablement sessions
+# - Early modules (1-4) before you introduce Hardware Profiles
+
+apiVersion: serving.kserve.io/v1alpha1
+kind: ServingRuntime
+metadata:
+  name: triton-cpu-lightweight
+  annotations:
+    openshift.io/display-name: "Triton CPU (lightweight — no GPU required)"
+    opendatahub.io/dashboard: "true"
+spec:
+  containers:
+    - name: kserve-container
+      image: nvcr.io/nvidia/tritonserver:24.03-py3   # still works on CPU
+      args:
+        - tritonserver
+        - --model-store=/mnt/models
+        - --http-port=8080
+        - --allow-http=true
+        - --log-verbose=1
+      resources:
+        requests:
+          cpu: "500m"
+          memory: 1Gi
+        limits:
+          cpu: "2"
+          memory: 4Gi
+      ports:
+        - containerPort: 8080
+          name: http
+  protocolVersions:
+    - v2
+  supportedModelFormats:
+    - name: onnx
+      version: "1"
+      autoSelect: true
+    - name: pytorch
+      version: "1"
+      autoSelect: true
+    # The "python" backend lets you run arbitrary Python generation code (great for teaching)
+  # You can also use the official "vllm" or "tgis" ServingRuntimes that Red Hat provides out-of-the-box
+  # if you want even less YAML to maintain.
